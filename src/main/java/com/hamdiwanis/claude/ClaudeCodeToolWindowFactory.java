@@ -1,6 +1,7 @@
 package com.hamdiwanis.claude;
 
 import com.intellij.notification.NotificationType;
+import com.intellij.ide.IdeEventQueue;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.wm.ToolWindow;
@@ -14,6 +15,7 @@ import org.jetbrains.plugins.terminal.TerminalView;
 
 import javax.swing.*;
 import java.awt.*;
+import java.awt.event.KeyEvent;
 import java.io.File;
 
 public class ClaudeCodeToolWindowFactory implements ToolWindowFactory {
@@ -37,6 +39,23 @@ public class ClaudeCodeToolWindowFactory implements ToolWindowFactory {
         Content content = ContentFactory.getInstance().createContent(panel, "", false);
         content.putUserData(WIDGET_KEY, widget);
         toolWindow.getContentManager().addContent(content);
+
+        // Register ESC key handler to forward ESC to terminal (Claude Code uses ESC to interrupt)
+        // JetBrains intercepts ESC by default to switch focus to editor, so we need to catch it first
+        IdeEventQueue.getInstance().addDispatcher(e -> {
+            if (e instanceof KeyEvent) {
+                KeyEvent ke = (KeyEvent) e;
+                if (ke.getID() == KeyEvent.KEY_PRESSED && ke.getKeyCode() == KeyEvent.VK_ESCAPE) {
+                    ToolWindow tw = ToolWindowManager.getInstance(project).getToolWindow(TOOL_WINDOW_ID);
+                    if (tw != null && tw.isActive()) {
+                        // Send ESC character (0x1B) to the terminal
+                        widget.getTerminalStarter().sendBytes(new byte[]{0x1B}, true);
+                        return true; // Consume the event
+                    }
+                }
+            }
+            return false;
+        }, project);
 
         // 关键：把底部 Terminal 工具窗收起，避免用户看到两个终端
         ToolWindow term = ToolWindowManager.getInstance(project).getToolWindow("Terminal");
